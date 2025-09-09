@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { supabase } from "../lib/supabase";
+import { useState, useEffect } from "react";
+import { supabase } from "../../lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
-import Navbar from "../components/Navbar";
-import Footer from "../components/Footer";
+import Navbar from "../../components/Navbar";
+import Footer from "../../components/Footer";
 
 interface Tale {
   id: number;
@@ -14,18 +14,15 @@ interface Tale {
   source: string;
 }
 
-export default function HomePage() {
+export default function ExplorePage() {
   const [tales, setTales] = useState<Tale[]>([]);
-  const [search, setSearch] = useState("");
-  const [nationFilter, setNationFilter] = useState("");
-  const [limit, setLimit] = useState(6);
-  const [nations, setNations] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedTaleIndex, setSelectedTaleIndex] = useState<number | null>(null);
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
-
-  const firstNewTaleRef = useRef<HTMLDivElement | null>(null);
-  const taleContentRef = useRef<HTMLDivElement | null>(null);
+  const [search, setSearch] = useState("");
+  const [nationFilter, setNationFilter] = useState("");
+  const [nations, setNations] = useState<string[]>([]);
+  const [limit, setLimit] = useState(12);
+  const [isOffline, setIsOffline] = useState(false);
 
   // Fetch offline tales from public folder
   const fetchOfflineTales = async () => {
@@ -34,19 +31,21 @@ export default function HomePage() {
     return data;
   };
 
+  // Fetch Tales
   const fetchTales = async () => {
     setLoading(true);
 
-    // If offline, use only the first 6 offline tales
     if (!navigator.onLine) {
       const offlineData = await fetchOfflineTales();
       setTales(offlineData.slice(0, 6));
+      setIsOffline(true);
       setLoading(false);
       return;
     }
 
-    // Online: fetch from Supabase
+    setIsOffline(false);
     let query = supabase.from("tales").select("*").limit(limit);
+
     if (search) query = query.ilike("title", `%${search}%`);
     if (nationFilter) query = query.eq("nation", nationFilter);
 
@@ -55,8 +54,8 @@ export default function HomePage() {
     setLoading(false);
   };
 
+  // Fetch nations
   const fetchNations = async () => {
-    // Offline: extract nations from offline tales
     if (!navigator.onLine) {
       const offlineData = await fetchOfflineTales();
       const uniqueNations = Array.from(new Set(offlineData.map((t) => t.nation)));
@@ -64,7 +63,6 @@ export default function HomePage() {
       return;
     }
 
-    // Online: fetch from Supabase
     const { data } = await supabase.from("tales").select("nation");
     if (data) {
       const uniqueNations = Array.from(new Set(data.map((item: any) => item.nation)));
@@ -72,76 +70,40 @@ export default function HomePage() {
     }
   };
 
-  const loadMore = () => {
-    setLimit((prev) => prev + 6);
-    setTimeout(() => {
-      firstNewTaleRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 300);
-  };
-
-  const openTale = (index: number) => setSelectedTaleIndex(index);
-  const closeTale = () => setSelectedTaleIndex(null);
-  const prevTale = () => {
-    if (selectedTaleIndex !== null && selectedTaleIndex > 0) {
-      setSelectedTaleIndex(selectedTaleIndex - 1);
-      taleContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-    }
-  };
-  const nextTale = () => {
-    if (selectedTaleIndex !== null && selectedTaleIndex < tales.length - 1) {
-      setSelectedTaleIndex(selectedTaleIndex + 1);
-      taleContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-    }
-  };
-
   useEffect(() => {
     fetchTales();
     fetchNations();
-
-    // Watch network changes
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
-
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
   }, [search, nationFilter, limit]);
 
+  // Full-screen tale handlers
+  const openTale = (index: number) => setSelectedTaleIndex(index);
+  const closeTale = () => setSelectedTaleIndex(null);
+  const prevTale = () => {
+    if (selectedTaleIndex !== null && selectedTaleIndex > 0) setSelectedTaleIndex(selectedTaleIndex - 1);
+  };
+  const nextTale = () => {
+    if (selectedTaleIndex !== null && selectedTaleIndex < tales.length - 1) setSelectedTaleIndex(selectedTaleIndex + 1);
+  };
+  const loadMore = () => setLimit((prev) => prev + 12);
+
   return (
-    <motion.div
-      className="min-h-screen bg-gray-50 transition-colors duration-500"
-      initial={{ opacity: 0, x: 50 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -50 }}
-      transition={{ duration: 0.4 }}
-    >
+    <div className="min-h-screen bg-gray-50 transition-colors duration-500 relative overflow-hidden">
+      <Navbar />
+
       {/* Hero Section */}
       <section
-        className="relative h-screen bg-cover bg-center flex items-center justify-center"
-        style={{ backgroundImage: "url('/homee.png')" }}
+        className="relative h-72 flex items-center justify-center bg-cover bg-center"
+        style={{ backgroundImage: "url('/exploree.png')" }}
       >
-        <div className="absolute inset-0 bg-black/50"></div>
-        <motion.div
-          className="relative text-center text-white px-4"
-          initial={{ opacity: 0, y: -50 }}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/60 to-black/20"></div>
+        <motion.h1
+          className="text-4xl md:text-5xl font-bold text-white z-10 text-center"
+          initial={{ opacity: 0, y: -30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1 }}
         >
-          <h1 className="text-5xl md:text-6xl font-bold mb-4">Welcome to Folktales App</h1>
-          <p className="text-lg md:text-2xl mb-6 max-w-2xl mx-auto">
-            Explore amazing folktales from all around the world. Stay updated with the latest stories we add every week!
-          </p>
-          <button
-            onClick={() => openTale(Math.floor(Math.random() * tales.length))}
-            className="px-6 py-3 bg-green-500 hover:bg-green-600 rounded-full text-white font-semibold transition transform hover:scale-105"
-          >
-            Read a Random Tale
-          </button>
-        </motion.div>
+          Explore Folktales
+        </motion.h1>
       </section>
 
       {/* Offline Banner */}
@@ -151,26 +113,26 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Search & Nation Filter */}
-      <section className="p-8 max-w-7xl mx-auto">
+      {/* Filters */}
+      <section className="p-8 max-w-7xl mx-auto -mt-5 relative z-10">
         <div className="flex flex-col sm:flex-row gap-4 mb-6">
           <input
             type="text"
             placeholder="Search stories..."
-            className="border p-2 rounded flex-1 focus:ring-2 focus:ring-blue-400"
+            className="border p-3 rounded-lg flex-1 focus:ring-2 focus:ring-green-400 shadow"
             value={search}
             onChange={(e) => {
               setTales([]);
-              setLimit(6);
+              setLimit(12);
               setSearch(e.target.value);
             }}
           />
           <select
-            className="border p-2 rounded focus:ring-2 focus:ring-blue-400"
+            className="border p-3 rounded-lg focus:ring-2 focus:ring-green-400 shadow"
             value={nationFilter}
             onChange={(e) => {
               setTales([]);
-              setLimit(6);
+              setLimit(12);
               setNationFilter(e.target.value);
             }}
           >
@@ -185,32 +147,33 @@ export default function HomePage() {
 
         {/* Tales Grid */}
         <motion.div
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-fr"
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
           layout
           initial="hidden"
           animate="show"
           variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1 } } }}
         >
           <AnimatePresence>
-            {loading && tales.length === 0
+            {loading
               ? Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="border p-4 rounded shadow animate-pulse h-48"></div>
+                  <div key={i} className="border p-4 rounded-lg shadow animate-pulse h-52"></div>
                 ))
               : tales.map((tale, index) => (
                   <motion.div
                     key={tale.id}
-                    ref={index === limit - 6 ? firstNewTaleRef : null}
                     layout
                     variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } }}
                     exit={{ opacity: 0, y: 20 }}
                     transition={{ duration: 0.3 }}
-                    className="border p-4 rounded shadow hover:shadow-lg hover:scale-105 transition bg-white flex flex-col justify-between"
+                    className="bg-white/90 backdrop-blur-sm border p-5 rounded-xl shadow-lg hover:shadow-2xl hover:scale-105 transition flex flex-col justify-between"
                   >
                     <div>
                       <h2 className="font-semibold text-xl mb-2">{tale.title}</h2>
                       <p className="text-gray-700 line-clamp-4">{tale.text}</p>
                       <p className="mt-2 text-sm text-gray-500">Source: {tale.source}</p>
-                      <span className="mt-1 bg-blue-500 text-white text-xs px-2 py-1 rounded">{tale.nation}</span>
+                      <span className="mt-2 inline-block bg-blue-500 text-white text-xs px-2 py-1 rounded">
+                        {tale.nation}
+                      </span>
                     </div>
                     <button
                       onClick={() => openTale(index)}
@@ -223,12 +186,11 @@ export default function HomePage() {
           </AnimatePresence>
         </motion.div>
 
-        {/* View More Button */}
+        {/* Load More */}
         {tales.length >= limit && !loading && !isOffline && (
-          <div className="flex justify-center mt-6">
+          <div className="flex justify-center mt-8">
             <button
               onClick={loadMore}
-              disabled={loading}
               className="px-8 py-3 bg-blue-500 hover:bg-blue-600 rounded-full text-white font-semibold shadow-lg transition transform hover:scale-105"
             >
               View More
@@ -237,18 +199,17 @@ export default function HomePage() {
         )}
       </section>
 
-      {/* Full-Screen Tale Panel */}
+      {/* Full-screen Tale Modal */}
       <AnimatePresence>
         {selectedTaleIndex !== null && (
           <motion.div
-            className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
             <motion.div
-              className="w-full h-full bg-white p-8 overflow-y-auto relative rounded-xl shadow-xl"
-              ref={taleContentRef}
+              className="w-full h-full bg-white/95 backdrop-blur-md p-6 overflow-y-auto relative rounded-lg shadow-2xl"
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
@@ -256,7 +217,7 @@ export default function HomePage() {
             >
               <button
                 onClick={closeTale}
-                className="absolute top-4 right-6 text-gray-800 hover:text-black font-bold text-3xl z-50"
+                className="absolute top-4 right-4 text-gray-800 hover:text-black font-bold text-3xl"
               >
                 ✕
               </button>
@@ -264,31 +225,28 @@ export default function HomePage() {
               {tales[selectedTaleIndex] && (
                 <div className="flex flex-col h-full justify-between">
                   <div>
-                    <h2 className="text-4xl font-bold mb-6 text-gray-900">
-                      {tales[selectedTaleIndex].title}
-                    </h2>
-                    <p className="text-lg text-gray-800 leading-relaxed mb-6">
-                      {tales[selectedTaleIndex].text}
-                    </p>
+                    <h2 className="text-4xl font-bold mb-6 text-gray-900">{tales[selectedTaleIndex].title}</h2>
+                    <p className="text-lg text-gray-800 leading-relaxed mb-6">{tales[selectedTaleIndex].text}</p>
                     <div className="flex justify-between items-center text-gray-700">
-                      <span className="bg-blue-600 text-white text-sm px-3 py-1 rounded">
+                      <span className="bg-green-500 text-white text-sm px-3 py-1 rounded">
                         {tales[selectedTaleIndex].nation}
                       </span>
                       <p className="text-sm">{tales[selectedTaleIndex].source}</p>
                     </div>
                   </div>
+
                   <div className="flex justify-between mt-6">
                     <button
                       onClick={prevTale}
                       disabled={selectedTaleIndex === 0}
-                      className="px-6 py-3 bg-blue-500 hover:bg-blue-600 rounded-full text-white font-semibold disabled:opacity-50"
+                      className="px-6 py-3  bg-blue-500 hover:bg-blue-600  rounded-full text-gray-900 font-semibold disabled:opacity-50"
                     >
                       Previous
                     </button>
                     <button
                       onClick={nextTale}
                       disabled={selectedTaleIndex === tales.length - 1}
-                      className="px-6 py-3 bg-blue-500 hover:bg-blue-600 rounded-full text-white font-semibold disabled:opacity-50"
+                      className="px-6 py-3  bg-blue-500 hover:bg-blue-600  rounded-full text-gray-900 font-semibold disabled:opacity-50"
                     >
                       Next
                     </button>
@@ -301,7 +259,24 @@ export default function HomePage() {
       </AnimatePresence>
 
       <Footer />
-      <Navbar />
-    </motion.div>
+
+      {/* Decorative blobs */}
+      <div className="absolute top-[-60px] left-[-60px] w-72 h-72 bg-green-400/30 rounded-full filter blur-3xl animate-blob"></div>
+      <div className="absolute bottom-[-60px] right-[-40px] w-72 h-72 bg-blue-400/30 rounded-full filter blur-3xl animate-blob animation-delay-2000"></div>
+
+      <style jsx>{`
+        @keyframes blob {
+          0%, 100% { transform: translate(0px, 0px) scale(1); }
+          33% { transform: translate(30px, -50px) scale(1.1); }
+          66% { transform: translate(-20px, 20px) scale(0.9); }
+        }
+        .animate-blob {
+          animation: blob 7s infinite;
+        }
+        .animation-delay-2000 {
+          animation-delay: 2s;
+        }
+      `}</style>
+    </div>
   );
 }
