@@ -103,14 +103,14 @@ export default function ContactPage() {
             <FaLinkedin />
           </a>
           <a
-            href="https://github.com"
+            href="https://github.com/Leo-Mazive-123/folktale-app.git"
             target="_blank"
             className="hover:text-gray-400 transition"
           >
             <FaGithub />
           </a>
         </div>
-      </section>
+      </section> 
 
       
 
