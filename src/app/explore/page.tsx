@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "../../lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "../../components/Navbar";
@@ -22,40 +22,42 @@ export default function ExplorePage() {
   const [nationFilter, setNationFilter] = useState("");
   const [nations, setNations] = useState<string[]>([]);
   const [limit, setLimit] = useState(12);
-  const [isOffline, setIsOffline] = useState(false);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
+  const firstNewTaleRef = useRef<HTMLDivElement | null>(null);
+  const taleContentRef = useRef<HTMLDivElement | null>(null);
 
   // Fetch offline tales from public folder
-  const fetchOfflineTales = async () => {
+  const fetchOfflineTales = useCallback(async (): Promise<Tale[]> => {
     const res = await fetch("/data/offlineTales.json");
     const data: Tale[] = await res.json();
     return data;
-  };
+  }, []);
 
-  // Fetch Tales
-  const fetchTales = async () => {
+  const fetchTales = useCallback(async () => {
     setLoading(true);
 
     if (!navigator.onLine) {
       const offlineData = await fetchOfflineTales();
-      setTales(offlineData.slice(0, 6));
+      setTales(offlineData.slice(0, limit));
       setIsOffline(true);
       setLoading(false);
       return;
     }
 
     setIsOffline(false);
-    let query = supabase.from("tales").select("*").limit(limit);
 
+    // Online: fetch from Supabase
+    let query = supabase.from("tales").select("*").limit(limit);
     if (search) query = query.ilike("title", `%${search}%`);
     if (nationFilter) query = query.eq("nation", nationFilter);
 
     const { data } = await query;
-    if (data) setTales(data);
+    if (data) setTales(data as Tale[]); // explicit cast
     setLoading(false);
-  };
+  }, [search, nationFilter, limit, fetchOfflineTales]);
 
-  // Fetch nations
-  const fetchNations = async () => {
+  const fetchNations = useCallback(async () => {
     if (!navigator.onLine) {
       const offlineData = await fetchOfflineTales();
       const uniqueNations = Array.from(new Set(offlineData.map((t) => t.nation)));
@@ -65,29 +67,50 @@ export default function ExplorePage() {
 
     const { data } = await supabase.from("tales").select("nation");
     if (data) {
-      const uniqueNations = Array.from(new Set(data.map((item: any) => item.nation)));
-      setNations(uniqueNations);
+      const nationsArray = (data as { nation: string }[]).map((item) => item.nation);
+      setNations(Array.from(new Set(nationsArray)));
     }
-  };
+  }, [fetchOfflineTales]);
 
   useEffect(() => {
     fetchTales();
     fetchNations();
-  }, [search, nationFilter, limit]);
 
-  // Full-screen tale handlers
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [fetchTales, fetchNations]);
+
   const openTale = (index: number) => setSelectedTaleIndex(index);
   const closeTale = () => setSelectedTaleIndex(null);
   const prevTale = () => {
-    if (selectedTaleIndex !== null && selectedTaleIndex > 0) setSelectedTaleIndex(selectedTaleIndex - 1);
+    if (selectedTaleIndex !== null && selectedTaleIndex > 0) {
+      setSelectedTaleIndex(selectedTaleIndex - 1);
+      taleContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    }
   };
   const nextTale = () => {
-    if (selectedTaleIndex !== null && selectedTaleIndex < tales.length - 1) setSelectedTaleIndex(selectedTaleIndex + 1);
+    if (selectedTaleIndex !== null && selectedTaleIndex < tales.length - 1) {
+      setSelectedTaleIndex(selectedTaleIndex + 1);
+      taleContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    }
   };
-  const loadMore = () => setLimit((prev) => prev + 12);
+  const loadMore = () => {
+    setLimit((prev) => prev + 12);
+    setTimeout(() => {
+      firstNewTaleRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 300);
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 transition-colors duration-500 relative overflow-hidden">
+    <motion.div className="min-h-screen bg-gray-50 transition-colors duration-500">
       <Navbar />
 
       {/* Hero Section */}
@@ -146,13 +169,7 @@ export default function ExplorePage() {
         </div>
 
         {/* Tales Grid */}
-        <motion.div
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-          layout
-          initial="hidden"
-          animate="show"
-          variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1 } } }}
-        >
+        <motion.div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" layout>
           <AnimatePresence>
             {loading
               ? Array.from({ length: 6 }).map((_, i) => (
@@ -161,10 +178,8 @@ export default function ExplorePage() {
               : tales.map((tale, index) => (
                   <motion.div
                     key={tale.id}
+                    ref={index === limit - 12 ? firstNewTaleRef : null}
                     layout
-                    variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } }}
-                    exit={{ opacity: 0, y: 20 }}
-                    transition={{ duration: 0.3 }}
                     className="bg-white/90 backdrop-blur-sm border p-5 rounded-xl shadow-lg hover:shadow-2xl hover:scale-105 transition flex flex-col justify-between"
                   >
                     <div>
@@ -210,6 +225,7 @@ export default function ExplorePage() {
           >
             <motion.div
               className="w-full h-full bg-white/95 backdrop-blur-md p-6 overflow-y-auto relative rounded-lg shadow-2xl"
+              ref={taleContentRef}
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
@@ -239,14 +255,14 @@ export default function ExplorePage() {
                     <button
                       onClick={prevTale}
                       disabled={selectedTaleIndex === 0}
-                      className="px-6 py-3  bg-blue-500 hover:bg-blue-600  rounded-full text-gray-900 font-semibold disabled:opacity-50"
+                      className="px-6 py-3 bg-blue-500 hover:bg-blue-600 rounded-full text-white font-semibold disabled:opacity-50"
                     >
                       Previous
                     </button>
                     <button
                       onClick={nextTale}
                       disabled={selectedTaleIndex === tales.length - 1}
-                      className="px-6 py-3  bg-blue-500 hover:bg-blue-600  rounded-full text-gray-900 font-semibold disabled:opacity-50"
+                      className="px-6 py-3 bg-blue-500 hover:bg-blue-600 rounded-full text-white font-semibold disabled:opacity-50"
                     >
                       Next
                     </button>
@@ -259,24 +275,6 @@ export default function ExplorePage() {
       </AnimatePresence>
 
       <Footer />
-
-      {/* Decorative blobs */}
-      <div className="absolute top-[-60px] left-[-60px] w-72 h-72 bg-green-400/30 rounded-full filter blur-3xl animate-blob"></div>
-      <div className="absolute bottom-[-60px] right-[-40px] w-72 h-72 bg-blue-400/30 rounded-full filter blur-3xl animate-blob animation-delay-2000"></div>
-
-      <style jsx>{`
-        @keyframes blob {
-          0%, 100% { transform: translate(0px, 0px) scale(1); }
-          33% { transform: translate(30px, -50px) scale(1.1); }
-          66% { transform: translate(-20px, 20px) scale(0.9); }
-        }
-        .animate-blob {
-          animation: blob 7s infinite;
-        }
-        .animation-delay-2000 {
-          animation-delay: 2s;
-        }
-      `}</style>
-    </div>
+    </motion.div>
   );
 }

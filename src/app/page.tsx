@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "../components/Navbar";
@@ -28,16 +28,15 @@ export default function HomePage() {
   const taleContentRef = useRef<HTMLDivElement | null>(null);
 
   // Fetch offline tales from public folder
-  const fetchOfflineTales = async () => {
+  const fetchOfflineTales = useCallback(async () => {
     const res = await fetch("/data/offlineTales.json");
     const data: Tale[] = await res.json();
     return data;
-  };
+  }, []);
 
-  const fetchTales = async () => {
+  const fetchTales = useCallback(async () => {
     setLoading(true);
 
-    // If offline, use only the first 6 offline tales
     if (!navigator.onLine) {
       const offlineData = await fetchOfflineTales();
       setTales(offlineData.slice(0, 6));
@@ -51,12 +50,11 @@ export default function HomePage() {
     if (nationFilter) query = query.eq("nation", nationFilter);
 
     const { data } = await query;
-    if (data) setTales(data);
+    if (data) setTales(data as Tale[]); // <-- explicit cast
     setLoading(false);
-  };
+  }, [search, nationFilter, limit, fetchOfflineTales]);
 
-  const fetchNations = async () => {
-    // Offline: extract nations from offline tales
+  const fetchNations = useCallback(async () => {
     if (!navigator.onLine) {
       const offlineData = await fetchOfflineTales();
       const uniqueNations = Array.from(new Set(offlineData.map((t) => t.nation)));
@@ -64,13 +62,12 @@ export default function HomePage() {
       return;
     }
 
-    // Online: fetch from Supabase
     const { data } = await supabase.from("tales").select("nation");
     if (data) {
-      const uniqueNations = Array.from(new Set(data.map((item: any) => item.nation)));
-      setNations(uniqueNations);
+      const nationsArray = (data as { nation: string }[]).map((item) => item.nation);
+      setNations(Array.from(new Set(nationsArray)));
     }
-  };
+  }, [fetchOfflineTales]);
 
   const loadMore = () => {
     setLimit((prev) => prev + 6);
@@ -98,7 +95,6 @@ export default function HomePage() {
     fetchTales();
     fetchNations();
 
-    // Watch network changes
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
 
@@ -109,7 +105,7 @@ export default function HomePage() {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [search, nationFilter, limit]);
+  }, [fetchTales, fetchNations]);
 
   return (
     <motion.div
