@@ -18,7 +18,7 @@ export default function ContactPage() {
 
   return (
     <div
-      className=" relative overflow-hidden bg-cover bg-center text-gray-900"
+      className="relative overflow-hidden bg-cover bg-center text-gray-900"
       style={{ backgroundImage: "url('/contact.png')" }}
     >
       {/* Dark overlay for readability */}
@@ -40,7 +40,22 @@ export default function ContactPage() {
           form below and we&apos;ll get back to you soon!
         </p>
 
-        {!submitted ? (
+        {/* Form or Thank You Message */}
+        {submitted ? (
+          <div className="w-full max-w-2xl bg-white rounded-xl shadow-xl p-8 text-center relative">
+            <button
+              onClick={() => setSubmitted(false)}
+              className="absolute top-4 right-4 text-gray-800 hover:text-black font-bold text-xl"
+            >
+              ✕
+            </button>
+            <h2 className="text-2xl font-bold mb-4">Thank you!</h2>
+            <p>
+              Your message has been sent successfully. We&apos;ll get back to you
+              soon.
+            </p>
+          </div>
+        ) : (
           <form
             action="https://formspree.io/f/xgvlrrdy"
             method="POST"
@@ -74,14 +89,6 @@ export default function ContactPage() {
               Send Message
             </button>
           </form>
-        ) : (
-          <div className="w-full max-w-2xl bg-white rounded-xl shadow-xl p-8 text-center">
-            <h2 className="text-2xl font-bold mb-4">Thank you!</h2>
-            <p>
-              Your message has been sent successfully. We&apos;ll get back to you
-              soon.
-            </p>
-          </div>
         )}
 
         {/* Social Icons */}
