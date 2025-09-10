@@ -13,7 +13,31 @@ export default function ContactPage() {
   const handleEmailClick = () => {
     navigator.clipboard.writeText("leomazive01@gmail.com");
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000); // tooltip disappears after 2s
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+
+    try {
+      const res = await fetch(form.action, {
+        method: form.method,
+        body: formData,
+        headers: { Accept: "application/json" },
+      });
+
+      if (res.ok) {
+        setSubmitted(true);
+        form.reset(); // optional: clear form fields
+      } else {
+        alert("There was an error sending your message. Please try again.");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("There was an error sending your message. Please try again.");
+    }
   };
 
   return (
@@ -21,16 +45,14 @@ export default function ContactPage() {
       className="relative overflow-hidden bg-cover bg-center text-gray-900"
       style={{ backgroundImage: "url('/contact.png')" }}
     >
-      {/* Dark overlay for readability */}
       <div className="absolute inset-0 bg-black/40 z-0"></div>
 
       <Navbar />
 
-      {/* Floating shapes / decorative blobs */}
+      {/* Decorative blobs */}
       <div className="absolute top-[-50px] left-[-50px] w-72 h-72 bg-green-400/30 rounded-full filter blur-3xl animate-blob z-0"></div>
       <div className="absolute bottom-[-60px] right-[-40px] w-72 h-72 bg-blue-400/30 rounded-full filter blur-3xl animate-blob animation-delay-2000 z-0"></div>
 
-      {/* Contact Section */}
       <section className="relative z-10 flex flex-col items-center justify-center py-24 px-6 sm:px-12">
         <h1 className="text-5xl md:text-6xl font-bold mb-6 text-center text-white">
           Get in Touch
@@ -59,7 +81,7 @@ export default function ContactPage() {
           <form
             action="https://formspree.io/f/xgvlrrdy"
             method="POST"
-            onSubmit={() => setSubmitted(true)}
+            onSubmit={handleSubmit}
             className="w-full max-w-2xl bg-white rounded-xl shadow-xl p-8 flex flex-col gap-6"
           >
             <input

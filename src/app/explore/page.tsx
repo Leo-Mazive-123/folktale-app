@@ -22,59 +22,14 @@ export default function ExplorePage() {
   const [nationFilter, setNationFilter] = useState("");
   const [nations, setNations] = useState<string[]>([]);
   const [limit, setLimit] = useState(12);
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [isOffline, setIsOffline] = useState(false); // initialize false to avoid SSR mismatch
 
   const firstNewTaleRef = useRef<HTMLDivElement | null>(null);
   const taleContentRef = useRef<HTMLDivElement | null>(null);
 
-  // Fetch offline tales from public folder
-  const fetchOfflineTales = useCallback(async (): Promise<Tale[]> => {
-    const res = await fetch("/data/offlineTales.json");
-    const data: Tale[] = await res.json();
-    return data;
-  }, []);
-
-  const fetchTales = useCallback(async () => {
-    setLoading(true);
-
-    if (!navigator.onLine) {
-      const offlineData = await fetchOfflineTales();
-      setTales(offlineData.slice(0, limit));
-      setIsOffline(true);
-      setLoading(false);
-      return;
-    }
-
-    setIsOffline(false);
-
-    // Online: fetch from Supabase
-    let query = supabase.from("tales").select("*").limit(limit);
-    if (search) query = query.ilike("title", `%${search}%`);
-    if (nationFilter) query = query.eq("nation", nationFilter);
-
-    const { data } = await query;
-    if (data) setTales(data as Tale[]); // explicit cast
-    setLoading(false);
-  }, [search, nationFilter, limit, fetchOfflineTales]);
-
-  const fetchNations = useCallback(async () => {
-    if (!navigator.onLine) {
-      const offlineData = await fetchOfflineTales();
-      const uniqueNations = Array.from(new Set(offlineData.map((t) => t.nation)));
-      setNations(uniqueNations);
-      return;
-    }
-
-    const { data } = await supabase.from("tales").select("nation");
-    if (data) {
-      const nationsArray = (data as { nation: string }[]).map((item) => item.nation);
-      setNations(Array.from(new Set(nationsArray)));
-    }
-  }, [fetchOfflineTales]);
-
+  // Detect online/offline on client only
   useEffect(() => {
-    fetchTales();
-    fetchNations();
+    setIsOffline(!navigator.onLine);
 
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
@@ -86,10 +41,56 @@ export default function ExplorePage() {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
+  }, []);
+
+  const fetchOfflineTales = useCallback(async (): Promise<Tale[]> => {
+    const res = await fetch("/data/offlineTales.json");
+    const data: Tale[] = await res.json();
+    return data;
+  }, []);
+
+  const fetchTales = useCallback(async () => {
+    setLoading(true);
+
+    if (isOffline) {
+      const offlineData = await fetchOfflineTales();
+      setTales(offlineData.slice(0, limit));
+      setLoading(false);
+      return;
+    }
+
+    let query = supabase.from("tales").select("*").limit(limit);
+    if (search) query = query.ilike("title", `%${search}%`);
+    if (nationFilter) query = query.eq("nation", nationFilter);
+
+    const { data } = await query;
+    if (data) setTales(data as Tale[]);
+    setLoading(false);
+  }, [search, nationFilter, limit, fetchOfflineTales, isOffline]);
+
+  const fetchNations = useCallback(async () => {
+    if (isOffline) {
+      const offlineData = await fetchOfflineTales();
+      const uniqueNations = Array.from(new Set(offlineData.map((t) => t.nation)));
+      setNations(uniqueNations);
+      return;
+    }
+
+    const { data } = await supabase.from("tales").select("nation");
+    if (data) {
+      const nationsArray = (data as { nation: string }[]).map((item) => item.nation);
+      setNations(Array.from(new Set(nationsArray)));
+    }
+  }, [fetchOfflineTales, isOffline]);
+
+  useEffect(() => {
+    fetchTales();
+    fetchNations();
   }, [fetchTales, fetchNations]);
 
   const openTale = (index: number) => setSelectedTaleIndex(index);
   const closeTale = () => setSelectedTaleIndex(null);
+
   const prevTale = () => {
     if (selectedTaleIndex !== null && selectedTaleIndex > 0) {
       setSelectedTaleIndex(selectedTaleIndex - 1);
