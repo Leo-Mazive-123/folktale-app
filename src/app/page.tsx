@@ -22,7 +22,7 @@ export default function HomePage() {
   const [nations, setNations] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedTaleIndex, setSelectedTaleIndex] = useState<number | null>(null);
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [isOffline, setIsOffline] = useState(false); // safe initial value
 
   const firstNewTaleRef = useRef<HTMLDivElement | null>(null);
   const taleContentRef = useRef<HTMLDivElement | null>(null);
@@ -38,11 +38,9 @@ export default function HomePage() {
     setLoading(true);
 
     let data: Tale[] = [];
-    if (!navigator.onLine) {
+    if (isOffline) {
       data = await fetchOfflineTales();
-      setIsOffline(true);
     } else {
-      setIsOffline(false);
       let query = supabase.from("tales").select("*").limit(limit);
       if (search) query = query.ilike("title", `%${search}%`);
       if (nationFilter) query = query.eq("nation", nationFilter);
@@ -68,7 +66,7 @@ export default function HomePage() {
 
   const fetchNations = useCallback(async () => {
     let data: Tale[] = [];
-    if (!navigator.onLine) {
+    if (isOffline) {
       data = await fetchOfflineTales();
       const uniqueNations = Array.from(new Set(data.map((t) => t.nation)));
       setNations(uniqueNations);
@@ -79,7 +77,7 @@ export default function HomePage() {
       const nationsArray = (onlineData as { nation: string }[]).map((item) => item.nation);
       setNations(Array.from(new Set(nationsArray)));
     }
-  }, [fetchOfflineTales]);
+  }, [fetchOfflineTales, isOffline]);
 
   const loadMore = () => {
     setLimit((prev) => prev + 6);
@@ -110,14 +108,17 @@ export default function HomePage() {
 
   // Initial load and offline/online detection
   useEffect(() => {
-    fetchTales();
-    fetchNations();
+    // Set initial offline status safely on client
+    setIsOffline(!navigator.onLine);
 
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
+
+    fetchTales();
+    fetchNations();
 
     return () => {
       window.removeEventListener("online", handleOnline);

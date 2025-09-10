@@ -22,7 +22,7 @@ export default function ExplorePage() {
   const [nations, setNations] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedTaleIndex, setSelectedTaleIndex] = useState<number | null>(null);
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [isOffline, setIsOffline] = useState(false); // Safe initial value
 
   const firstNewTaleRef = useRef<HTMLDivElement | null>(null);
   const taleContentRef = useRef<HTMLDivElement | null>(null);
@@ -36,13 +36,11 @@ export default function ExplorePage() {
 
   const fetchTales = useCallback(async () => {
     setLoading(true);
-
     let data: Tale[] = [];
-    if (!navigator.onLine) {
+
+    if (isOffline) {
       data = await fetchOfflineTales();
-      setIsOffline(true);
     } else {
-      setIsOffline(false);
       let query = supabase.from("tales").select("*").limit(limit);
       if (search) query = query.ilike("title", `%${search}%`);
       if (nationFilter) query = query.eq("nation", nationFilter);
@@ -68,18 +66,19 @@ export default function ExplorePage() {
 
   const fetchNations = useCallback(async () => {
     let data: Tale[] = [];
-    if (!navigator.onLine) {
+    if (isOffline) {
       data = await fetchOfflineTales();
       const uniqueNations = Array.from(new Set(data.map((t) => t.nation)));
       setNations(uniqueNations);
       return;
     }
+
     const { data: onlineData } = await supabase.from("tales").select("nation");
     if (onlineData) {
       const nationsArray = (onlineData as { nation: string }[]).map((item) => item.nation);
       setNations(Array.from(new Set(nationsArray)));
     }
-  }, [fetchOfflineTales]);
+  }, [fetchOfflineTales, isOffline]);
 
   const loadMore = () => {
     setLimit((prev) => prev + 12);
@@ -109,15 +108,19 @@ export default function ExplorePage() {
     fetchTales();
   }, [search, nationFilter, limit, fetchTales]);
 
+  // Offline/online detection and initial fetch
   useEffect(() => {
-    fetchTales();
-    fetchNations();
+    // Set initial offline status safely on client
+    setIsOffline(!navigator.onLine);
 
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
+
+    fetchTales();
+    fetchNations();
 
     return () => {
       window.removeEventListener("online", handleOnline);
@@ -183,10 +186,7 @@ export default function ExplorePage() {
         </div>
 
         {/* Tales Grid */}
-        <motion.div
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-fr"
-          layout
-        >
+        <motion.div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-fr" layout>
           <AnimatePresence>
             {loading && tales.length === 0
               ? Array.from({ length: 6 }).map((_, i) => (
@@ -259,12 +259,8 @@ export default function ExplorePage() {
               {tales[selectedTaleIndex] && (
                 <div className="flex flex-col h-full justify-between">
                   <div>
-                    <h2 className="text-4xl font-bold mb-6 text-gray-900">
-                      {tales[selectedTaleIndex].title}
-                    </h2>
-                    <p className="text-lg text-gray-800 leading-relaxed mb-6">
-                      {tales[selectedTaleIndex].text}
-                    </p>
+                    <h2 className="text-4xl font-bold mb-6 text-gray-900">{tales[selectedTaleIndex].title}</h2>
+                    <p className="text-lg text-gray-800 leading-relaxed mb-6">{tales[selectedTaleIndex].text}</p>
                     <div className="flex justify-between items-center text-gray-700">
                       <span className="bg-blue-600 text-white text-sm px-3 py-1 rounded">
                         {tales[selectedTaleIndex].nation}
