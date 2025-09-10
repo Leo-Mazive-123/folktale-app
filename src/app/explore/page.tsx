@@ -16,20 +16,102 @@ interface Tale {
 
 export default function ExplorePage() {
   const [tales, setTales] = useState<Tale[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [selectedTaleIndex, setSelectedTaleIndex] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [nationFilter, setNationFilter] = useState("");
-  const [nations, setNations] = useState<string[]>([]);
   const [limit, setLimit] = useState(12);
-  const [isOffline, setIsOffline] = useState(false); // initialize false to avoid SSR mismatch
+  const [nations, setNations] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedTaleIndex, setSelectedTaleIndex] = useState<number | null>(null);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
   const firstNewTaleRef = useRef<HTMLDivElement | null>(null);
   const taleContentRef = useRef<HTMLDivElement | null>(null);
 
-  // Detect online/offline on client only
+  // Fetch offline tales from public folder
+  const fetchOfflineTales = useCallback(async (): Promise<Tale[]> => {
+    const res = await fetch("/data/offlineTales.json");
+    const data: Tale[] = await res.json();
+    return data;
+  }, []);
+
+  const fetchTales = useCallback(async () => {
+    setLoading(true);
+
+    let data: Tale[] = [];
+    if (!navigator.onLine) {
+      data = await fetchOfflineTales();
+      setIsOffline(true);
+    } else {
+      setIsOffline(false);
+      let query = supabase.from("tales").select("*").limit(limit);
+      if (search) query = query.ilike("title", `%${search}%`);
+      if (nationFilter) query = query.eq("nation", nationFilter);
+
+      const { data: onlineData } = await query;
+      if (onlineData) data = onlineData as Tale[];
+    }
+
+    // Apply filtering locally for offline mode
+    if (isOffline) {
+      if (search) {
+        data = data.filter((t) => t.title.toLowerCase().includes(search.toLowerCase()));
+      }
+      if (nationFilter) {
+        data = data.filter((t) => t.nation === nationFilter);
+      }
+      data = data.slice(0, limit);
+    }
+
+    setTales(data);
+    setLoading(false);
+  }, [search, nationFilter, limit, fetchOfflineTales, isOffline]);
+
+  const fetchNations = useCallback(async () => {
+    let data: Tale[] = [];
+    if (!navigator.onLine) {
+      data = await fetchOfflineTales();
+      const uniqueNations = Array.from(new Set(data.map((t) => t.nation)));
+      setNations(uniqueNations);
+      return;
+    }
+    const { data: onlineData } = await supabase.from("tales").select("nation");
+    if (onlineData) {
+      const nationsArray = (onlineData as { nation: string }[]).map((item) => item.nation);
+      setNations(Array.from(new Set(nationsArray)));
+    }
+  }, [fetchOfflineTales]);
+
+  const loadMore = () => {
+    setLimit((prev) => prev + 12);
+    setTimeout(() => {
+      firstNewTaleRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 300);
+  };
+
+  const openTale = (index: number) => setSelectedTaleIndex(index);
+  const closeTale = () => setSelectedTaleIndex(null);
+
+  const prevTale = () => {
+    if (selectedTaleIndex !== null && selectedTaleIndex > 0) {
+      setSelectedTaleIndex(selectedTaleIndex - 1);
+      taleContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  const nextTale = () => {
+    if (selectedTaleIndex !== null && selectedTaleIndex < tales.length - 1) {
+      setSelectedTaleIndex(selectedTaleIndex + 1);
+      taleContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
   useEffect(() => {
-    setIsOffline(!navigator.onLine);
+    fetchTales();
+  }, [search, nationFilter, limit, fetchTales]);
+
+  useEffect(() => {
+    fetchTales();
+    fetchNations();
 
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
@@ -41,77 +123,16 @@ export default function ExplorePage() {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, []);
-
-  const fetchOfflineTales = useCallback(async (): Promise<Tale[]> => {
-    const res = await fetch("/data/offlineTales.json");
-    const data: Tale[] = await res.json();
-    return data;
-  }, []);
-
-  const fetchTales = useCallback(async () => {
-    setLoading(true);
-
-    if (isOffline) {
-      const offlineData = await fetchOfflineTales();
-      setTales(offlineData.slice(0, limit));
-      setLoading(false);
-      return;
-    }
-
-    let query = supabase.from("tales").select("*").limit(limit);
-    if (search) query = query.ilike("title", `%${search}%`);
-    if (nationFilter) query = query.eq("nation", nationFilter);
-
-    const { data } = await query;
-    if (data) setTales(data as Tale[]);
-    setLoading(false);
-  }, [search, nationFilter, limit, fetchOfflineTales, isOffline]);
-
-  const fetchNations = useCallback(async () => {
-    if (isOffline) {
-      const offlineData = await fetchOfflineTales();
-      const uniqueNations = Array.from(new Set(offlineData.map((t) => t.nation)));
-      setNations(uniqueNations);
-      return;
-    }
-
-    const { data } = await supabase.from("tales").select("nation");
-    if (data) {
-      const nationsArray = (data as { nation: string }[]).map((item) => item.nation);
-      setNations(Array.from(new Set(nationsArray)));
-    }
-  }, [fetchOfflineTales, isOffline]);
-
-  useEffect(() => {
-    fetchTales();
-    fetchNations();
   }, [fetchTales, fetchNations]);
 
-  const openTale = (index: number) => setSelectedTaleIndex(index);
-  const closeTale = () => setSelectedTaleIndex(null);
-
-  const prevTale = () => {
-    if (selectedTaleIndex !== null && selectedTaleIndex > 0) {
-      setSelectedTaleIndex(selectedTaleIndex - 1);
-      taleContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-    }
-  };
-  const nextTale = () => {
-    if (selectedTaleIndex !== null && selectedTaleIndex < tales.length - 1) {
-      setSelectedTaleIndex(selectedTaleIndex + 1);
-      taleContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-    }
-  };
-  const loadMore = () => {
-    setLimit((prev) => prev + 12);
-    setTimeout(() => {
-      firstNewTaleRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 300);
-  };
-
   return (
-    <motion.div className="min-h-screen bg-gray-50 transition-colors duration-500">
+    <motion.div
+      className="min-h-screen bg-gray-50 transition-colors duration-500"
+      initial={{ opacity: 0, x: 50 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -50 }}
+      transition={{ duration: 0.4 }}
+    >
       <Navbar />
 
       {/* Hero Section */}
@@ -138,27 +159,19 @@ export default function ExplorePage() {
       )}
 
       {/* Filters */}
-      <section className="p-8 max-w-7xl mx-auto -mt-5 relative z-10">
+      <section className="p-8 max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row gap-4 mb-6">
           <input
             type="text"
             placeholder="Search stories..."
-            className="border p-3 rounded-lg flex-1 focus:ring-2 focus:ring-green-400 shadow"
+            className="border p-2 rounded flex-1 focus:ring-2 focus:ring-blue-400"
             value={search}
-            onChange={(e) => {
-              setTales([]);
-              setLimit(12);
-              setSearch(e.target.value);
-            }}
+            onChange={(e) => setSearch(e.target.value)}
           />
           <select
-            className="border p-3 rounded-lg focus:ring-2 focus:ring-green-400 shadow"
+            className="border p-2 rounded focus:ring-2 focus:ring-blue-400"
             value={nationFilter}
-            onChange={(e) => {
-              setTales([]);
-              setLimit(12);
-              setNationFilter(e.target.value);
-            }}
+            onChange={(e) => setNationFilter(e.target.value)}
           >
             <option value="">All Nations</option>
             {nations.map((nation) => (
@@ -170,26 +183,30 @@ export default function ExplorePage() {
         </div>
 
         {/* Tales Grid */}
-        <motion.div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" layout>
+        <motion.div
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-fr"
+          layout
+        >
           <AnimatePresence>
-            {loading
+            {loading && tales.length === 0
               ? Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="border p-4 rounded-lg shadow animate-pulse h-52"></div>
+                  <div key={i} className="border p-4 rounded shadow animate-pulse h-48"></div>
                 ))
               : tales.map((tale, index) => (
                   <motion.div
                     key={tale.id}
                     ref={index === limit - 12 ? firstNewTaleRef : null}
                     layout
-                    className="bg-white/90 backdrop-blur-sm border p-5 rounded-xl shadow-lg hover:shadow-2xl hover:scale-105 transition flex flex-col justify-between"
+                    variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } }}
+                    exit={{ opacity: 0, y: 20 }}
+                    transition={{ duration: 0.3 }}
+                    className="border p-4 rounded shadow hover:shadow-lg hover:scale-105 transition bg-white flex flex-col justify-between"
                   >
                     <div>
                       <h2 className="font-semibold text-xl mb-2">{tale.title}</h2>
                       <p className="text-gray-700 line-clamp-4">{tale.text}</p>
                       <p className="mt-2 text-sm text-gray-500">Source: {tale.source}</p>
-                      <span className="mt-2 inline-block bg-blue-500 text-white text-xs px-2 py-1 rounded">
-                        {tale.nation}
-                      </span>
+                      <span className="mt-1 bg-blue-500 text-white text-xs px-2 py-1 rounded">{tale.nation}</span>
                     </div>
                     <button
                       onClick={() => openTale(index)}
@@ -204,7 +221,7 @@ export default function ExplorePage() {
 
         {/* Load More */}
         {tales.length >= limit && !loading && !isOffline && (
-          <div className="flex justify-center mt-8">
+          <div className="flex justify-center mt-6">
             <button
               onClick={loadMore}
               className="px-8 py-3 bg-blue-500 hover:bg-blue-600 rounded-full text-white font-semibold shadow-lg transition transform hover:scale-105"
@@ -215,17 +232,17 @@ export default function ExplorePage() {
         )}
       </section>
 
-      {/* Full-screen Tale Modal */}
+      {/* Full-Screen Tale Panel */}
       <AnimatePresence>
         {selectedTaleIndex !== null && (
           <motion.div
-            className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
             <motion.div
-              className="w-full h-full bg-white/95 backdrop-blur-md p-6 overflow-y-auto relative rounded-lg shadow-2xl"
+              className="w-full h-full bg-white p-8 overflow-y-auto relative rounded-xl shadow-xl"
               ref={taleContentRef}
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -234,7 +251,7 @@ export default function ExplorePage() {
             >
               <button
                 onClick={closeTale}
-                className="absolute top-4 right-4 text-gray-800 hover:text-black font-bold text-3xl"
+                className="absolute top-4 right-6 text-gray-800 hover:text-black font-bold text-3xl z-50"
               >
                 ✕
               </button>
@@ -242,16 +259,19 @@ export default function ExplorePage() {
               {tales[selectedTaleIndex] && (
                 <div className="flex flex-col h-full justify-between">
                   <div>
-                    <h2 className="text-4xl font-bold mb-6 text-gray-900">{tales[selectedTaleIndex].title}</h2>
-                    <p className="text-lg text-gray-800 leading-relaxed mb-6">{tales[selectedTaleIndex].text}</p>
+                    <h2 className="text-4xl font-bold mb-6 text-gray-900">
+                      {tales[selectedTaleIndex].title}
+                    </h2>
+                    <p className="text-lg text-gray-800 leading-relaxed mb-6">
+                      {tales[selectedTaleIndex].text}
+                    </p>
                     <div className="flex justify-between items-center text-gray-700">
-                      <span className="bg-green-500 text-white text-sm px-3 py-1 rounded">
+                      <span className="bg-blue-600 text-white text-sm px-3 py-1 rounded">
                         {tales[selectedTaleIndex].nation}
                       </span>
                       <p className="text-sm">{tales[selectedTaleIndex].source}</p>
                     </div>
                   </div>
-
                   <div className="flex justify-between mt-6">
                     <button
                       onClick={prevTale}

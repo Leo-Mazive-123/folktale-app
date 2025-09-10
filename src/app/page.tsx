@@ -22,78 +22,64 @@ export default function HomePage() {
   const [nations, setNations] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedTaleIndex, setSelectedTaleIndex] = useState<number | null>(null);
-  const [isOffline, setIsOffline] = useState(false);
-  const [mounted, setMounted] = useState(false); // Track client mount
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
   const firstNewTaleRef = useRef<HTMLDivElement | null>(null);
   const taleContentRef = useRef<HTMLDivElement | null>(null);
 
-  // Fetch offline tales
-  const fetchOfflineTales = useCallback(async (): Promise<Tale[]> => {
+  // Fetch offline tales from public folder
+  const fetchOfflineTales = useCallback(async () => {
     const res = await fetch("/data/offlineTales.json");
     const data: Tale[] = await res.json();
     return data;
   }, []);
 
   const fetchTales = useCallback(async () => {
-    if (!mounted) return;
-
     setLoading(true);
 
+    let data: Tale[] = [];
     if (!navigator.onLine) {
-      const offlineData = await fetchOfflineTales();
-      setTales(offlineData.slice(0, limit));
+      data = await fetchOfflineTales();
       setIsOffline(true);
-      setLoading(false);
-      return;
+    } else {
+      setIsOffline(false);
+      let query = supabase.from("tales").select("*").limit(limit);
+      if (search) query = query.ilike("title", `%${search}%`);
+      if (nationFilter) query = query.eq("nation", nationFilter);
+
+      const { data: onlineData } = await query;
+      if (onlineData) data = onlineData as Tale[];
     }
 
-    setIsOffline(false);
+    // Apply filtering locally for offline mode
+    if (isOffline) {
+      if (search) {
+        data = data.filter((t) => t.title.toLowerCase().includes(search.toLowerCase()));
+      }
+      if (nationFilter) {
+        data = data.filter((t) => t.nation === nationFilter);
+      }
+      data = data.slice(0, limit);
+    }
 
-    // Online: fetch from Supabase
-    let query = supabase.from("tales").select("*").limit(limit);
-    if (search) query = query.ilike("title", `%${search}%`);
-    if (nationFilter) query = query.eq("nation", nationFilter);
-
-    const { data } = await query;
-    if (data) setTales(data as Tale[]);
+    setTales(data);
     setLoading(false);
-  }, [search, nationFilter, limit, fetchOfflineTales, mounted]);
+  }, [search, nationFilter, limit, fetchOfflineTales, isOffline]);
 
   const fetchNations = useCallback(async () => {
-    if (!mounted) return;
-
+    let data: Tale[] = [];
     if (!navigator.onLine) {
-      const offlineData = await fetchOfflineTales();
-      const uniqueNations = Array.from(new Set(offlineData.map((t) => t.nation)));
+      data = await fetchOfflineTales();
+      const uniqueNations = Array.from(new Set(data.map((t) => t.nation)));
       setNations(uniqueNations);
       return;
     }
-
-    const { data } = await supabase.from("tales").select("nation");
-    if (data) {
-      const nationsArray = (data as { nation: string }[]).map((item) => item.nation);
+    const { data: onlineData } = await supabase.from("tales").select("nation");
+    if (onlineData) {
+      const nationsArray = (onlineData as { nation: string }[]).map((item) => item.nation);
       setNations(Array.from(new Set(nationsArray)));
     }
-  }, [fetchOfflineTales, mounted]);
-
-  useEffect(() => {
-    setMounted(true); // Mark component as mounted
-
-    fetchTales();
-    fetchNations();
-
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
-
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, [fetchTales, fetchNations]);
+  }, [fetchOfflineTales]);
 
   const loadMore = () => {
     setLimit((prev) => prev + 6);
@@ -117,24 +103,55 @@ export default function HomePage() {
     }
   };
 
-  return (
-    <motion.div className="min-h-screen bg-gray-50 transition-colors duration-500">
-      <Navbar />
+  // Update tales when filters change without clearing current view
+  useEffect(() => {
+    fetchTales();
+  }, [search, nationFilter, limit, fetchTales]);
 
+  // Initial load and offline/online detection
+  useEffect(() => {
+    fetchTales();
+    fetchNations();
+
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [fetchTales, fetchNations]);
+
+  return (
+    <motion.div
+      className="min-h-screen bg-gray-50 transition-colors duration-500"
+      initial={{ opacity: 0, x: 50 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -50 }}
+      transition={{ duration: 0.4 }}
+    >
       {/* Hero Section */}
       <section
         className="relative h-screen bg-cover bg-center flex items-center justify-center"
         style={{ backgroundImage: "url('/homee.png')" }}
       >
         <div className="absolute inset-0 bg-black/50"></div>
-        <motion.div className="relative text-center text-white px-4">
+        <motion.div
+          className="relative text-center text-white px-4"
+          initial={{ opacity: 0, y: -50 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1 }}
+        >
           <h1 className="text-5xl md:text-6xl font-bold mb-4">Welcome to Folktales App</h1>
           <p className="text-lg md:text-2xl mb-6 max-w-2xl mx-auto">
-            Explore amazing folktales from all around the world.
+            Explore amazing folktales from all around the world. Stay updated with the latest stories we add every week!
           </p>
           <button
             onClick={() => openTale(Math.floor(Math.random() * tales.length))}
-            className="px-6 py-3 bg-green-500 hover:bg-green-600 rounded-full text-white font-semibold"
+            className="px-6 py-3 bg-green-500 hover:bg-green-600 rounded-full text-white font-semibold transition transform hover:scale-105"
           >
             Read a Random Tale
           </button>
@@ -142,7 +159,7 @@ export default function HomePage() {
       </section>
 
       {/* Offline Banner */}
-      {mounted && isOffline && (
+      {isOffline && (
         <div className="bg-yellow-400 text-black text-center py-2 font-semibold">
           ⚠️ You are offline. Showing limited tales from offline storage.
         </div>
@@ -156,20 +173,12 @@ export default function HomePage() {
             placeholder="Search stories..."
             className="border p-2 rounded flex-1 focus:ring-2 focus:ring-blue-400"
             value={search}
-            onChange={(e) => {
-              setTales([]);
-              setLimit(6);
-              setSearch(e.target.value);
-            }}
+            onChange={(e) => setSearch(e.target.value)}
           />
           <select
             className="border p-2 rounded focus:ring-2 focus:ring-blue-400"
             value={nationFilter}
-            onChange={(e) => {
-              setTales([]);
-              setLimit(6);
-              setNationFilter(e.target.value);
-            }}
+            onChange={(e) => setNationFilter(e.target.value)}
           >
             <option value="">All Nations</option>
             {nations.map((nation) => (
@@ -184,6 +193,9 @@ export default function HomePage() {
         <motion.div
           className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-fr"
           layout
+          initial="hidden"
+          animate="show"
+          variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1 } } }}
         >
           <AnimatePresence>
             {loading && tales.length === 0
@@ -195,15 +207,16 @@ export default function HomePage() {
                     key={tale.id}
                     ref={index === limit - 6 ? firstNewTaleRef : null}
                     layout
+                    variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } }}
+                    exit={{ opacity: 0, y: 20 }}
+                    transition={{ duration: 0.3 }}
                     className="border p-4 rounded shadow hover:shadow-lg hover:scale-105 transition bg-white flex flex-col justify-between"
                   >
                     <div>
                       <h2 className="font-semibold text-xl mb-2">{tale.title}</h2>
                       <p className="text-gray-700 line-clamp-4">{tale.text}</p>
                       <p className="mt-2 text-sm text-gray-500">Source: {tale.source}</p>
-                      <span className="mt-1 bg-blue-500 text-white text-xs px-2 py-1 rounded">
-                        {tale.nation}
-                      </span>
+                      <span className="mt-1 bg-blue-500 text-white text-xs px-2 py-1 rounded">{tale.nation}</span>
                     </div>
                     <button
                       onClick={() => openTale(index)}
@@ -230,7 +243,7 @@ export default function HomePage() {
         )}
       </section>
 
-      {/* Full-Screen Tale Modal */}
+      {/* Full-Screen Tale Panel */}
       <AnimatePresence>
         {selectedTaleIndex !== null && (
           <motion.div
@@ -294,6 +307,7 @@ export default function HomePage() {
       </AnimatePresence>
 
       <Footer />
+      <Navbar />
     </motion.div>
   );
 }
