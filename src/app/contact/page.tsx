@@ -37,7 +37,7 @@ export default function ContactPage() {
         </h1>
         <p className="text-lg md:text-xl text-center mb-12 max-w-2xl text-gray-200">
           Have a question, suggestion, or just want to say hello? Fill out the
-          form below and we'll get back to you soon!
+          form below and we&apos;ll get back to you soon!
         </p>
 
         {!submitted ? (
@@ -77,7 +77,10 @@ export default function ContactPage() {
         ) : (
           <div className="w-full max-w-2xl bg-white rounded-xl shadow-xl p-8 text-center">
             <h2 className="text-2xl font-bold mb-4">Thank you!</h2>
-            <p>Your message has been sent successfully. We'll get back to you soon.</p>
+            <p>
+              Your message has been sent successfully. We&apos;ll get back to you
+              soon.
+            </p>
           </div>
         )}
 
@@ -110,9 +113,7 @@ export default function ContactPage() {
             <FaGithub />
           </a>
         </div>
-      </section> 
-
-      
+      </section>
 
       {/* Animations */}
       <style jsx>{`
@@ -135,7 +136,6 @@ export default function ContactPage() {
           animation-delay: 2s;
         }
       `}</style>
-
 
       <Footer />
     </div>
