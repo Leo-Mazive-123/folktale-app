@@ -8,7 +8,5 @@ module.exports = {
   theme: {
     extend: {},
   },
-  plugins: [
-    require('@tailwindcss/line-clamp'), // for line-clamp-4 in tales preview
-  ],
+  plugins: [],
 };
